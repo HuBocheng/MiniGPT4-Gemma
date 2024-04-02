@@ -12,8 +12,9 @@ model:
   # generation configs
   prompt: ""
 
-  llm_backbone: "./weight/gemma-2b-it"
+  llm_backbone: "/root/weight/gemma-2b-it"
   llm_type: "gemma"
+  low_resource: False
 
 preprocess:
     vis_processor:

@@ -25,7 +25,7 @@ from minigpt4.common.optims import (
     LinearWarmupStepLRScheduler,
 )
 from minigpt4.common.registry import registry
-from minigpt4.common.utils import now
+from minigpt4.common.utils import now,view_gpu,view_model_device_allocation,check_frozen_parts
 
 # imports modules for registration
 from minigpt4.datasets.builders import *
@@ -77,6 +77,24 @@ def main():
     # os.environ["NCCL_BLOCKING_WAIT"] = "1"
 
     # set before init_distributed_mode() to ensure the same job_id shared across all ranks.
+    logging.info("before clean, free memory: {}".format(torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)))
+    
+    
+#     # 创建一个小张量
+#     tensor_cpu = torch.tensor([1, 2, 3, 4, 5])
+
+#     # 将张量移动到GPU上
+#     tensor_gpu = tensor_cpu.to('cuda')
+#     print("before clean:")
+#     view_gpu()
+    
+#     torch.cuda.empty_cache()
+    
+#     print("after clean:")
+#     view_gpu()
+
+
+
     job_id = now()
     args = parse_args()
     cfg = Config(args)
@@ -91,15 +109,26 @@ def main():
     task = tasks.setup_task(cfg) # task表示可以看作“软件包”，这之后就进入“软件包”minigpt4/tasks/__init__.py执行“软件包的初始化操作”
     datasets = task.build_datasets(cfg)
     model = task.build_model(cfg)
+    
+    print("In train.py")
+    view_model_device_allocation(model,cpu_only=True)
+    check_frozen_parts(model,active_only=True)
 
+    print(cfg.run_cfg.wandb_log)
     if cfg.run_cfg.wandb_log:
         wandb.login()
         wandb.init(project="minigptv", name=cfg.run_cfg.job_name)
         wandb.watch(model)
 
     logging.info("before clean, free memory: {}".format(torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)))
+    print("before clean:")
+    view_gpu()
+    
     torch.cuda.empty_cache()
-    logging.info("after clean, free memory: {}".format(torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)))
+    
+    print("after clean:")
+    view_gpu()
+    print('CUDA usage:',torch.ones(1).cuda())
 
     runner = get_runner_class(cfg)(
         cfg=cfg, job_id=job_id, task=task, model=model, datasets=datasets

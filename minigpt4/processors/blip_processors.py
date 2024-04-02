@@ -113,7 +113,8 @@ class Blip2ImageTrainProcessor(BlipImageBaseProcessor):
 class Blip2ImageEvalProcessor(BlipImageBaseProcessor):
     def __init__(self, image_size=224, mean=None, std=None):
         super().__init__(mean=mean, std=std)
-
+        
+        # 将图像调整到指定的大小，然后将图像转换为张量，并进行标准化处理
         self.transform = transforms.Compose(
             [
                 transforms.Resize(

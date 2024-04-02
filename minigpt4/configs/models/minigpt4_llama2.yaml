@@ -12,7 +12,8 @@ model:
   # generation configs
   prompt: ""
 
-  llm_backbone: "./weight/chinese-alpaca-2-7b-hf"
+  llm_backbone: "/root/weight/Llama-2-7b-chat-hf"
+  llm_type: "llama"
 
 preprocess:
     vis_processor:

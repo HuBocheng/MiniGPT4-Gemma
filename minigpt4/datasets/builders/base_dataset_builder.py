@@ -67,7 +67,8 @@ class BaseDatasetBuilder:
         if vis_proc_cfg is not None:
             vis_train_cfg = vis_proc_cfg.get("train")
             vis_eval_cfg = vis_proc_cfg.get("eval")
-
+            
+            # 根据配置文件中的vis_processor和text_processor的train和eval配置，构建vis_processor和text_processor
             self.vis_processors["train"] = self._build_proc_from_cfg(vis_train_cfg)
             self.vis_processors["eval"] = self._build_proc_from_cfg(vis_eval_cfg)
 
@@ -81,6 +82,7 @@ class BaseDatasetBuilder:
     @staticmethod
     def _build_proc_from_cfg(cfg):
         return (
+            # 根据名字获取处理器类，然后根据配置文件构建处理器BlipCaptionProcessor、Blip2ImageTrainProcessor、Blip2ImageEvalProcessor
             registry.get_processor_class(cfg.name).from_config(cfg)
             if cfg is not None
             else None

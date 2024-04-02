@@ -37,8 +37,8 @@ run:
   weight_decay: 0.05
   max_epoch: 4
   num_workers: 4
-  warmup_steps: 5000
-  iters_per_epoch: 5000
+  warmup_steps: 500
+  iters_per_epoch: 50000
 
   seed: 42
   output_dir: "output/minigpt4_stage1_pretrain"
@@ -54,5 +54,5 @@ run:
   dist_url: "env://"
   distributed: True
 
-  wandb_log: false
+  wandb_log: False
   job_name: minigpt4_gemma_pretrain

@@ -18,6 +18,9 @@ import urllib.request
 from typing import Optional
 from urllib.parse import urlparse
 
+import torch
+
+
 import numpy as np
 import pandas as pd
 import yaml
@@ -426,3 +429,46 @@ def get_file_size(filename):
     """
     size_in_mb = os.path.getsize(filename) / float(1024**2)
     return size_in_mb
+
+
+def view_gpu():
+    if torch.cuda.is_available():
+        print("---------------start view---------------")
+    # 遍历所有设备
+        for i in range(torch.cuda.device_count()):
+            # 获取设备名称
+            print("Device:", torch.cuda.get_device_name(i))
+            # 获取设备总内存, 转换为GB
+            print("Total Memory: {:.5f} MB".format(torch.cuda.get_device_properties(i).total_memory / 1024**2))
+            # 获取当前已分配内存
+            print("Memory Allocated: {:.5f} MB".format(torch.cuda.memory_allocated(i) / 1024**2))
+            # 获取当前保留（缓存）内存
+            print("Memory Cached (Reserved): {:.5f} MB".format(torch.cuda.memory_reserved(i) / 1024**2))
+            print("-" * 40)
+        print("----------------end view----------------")
+    else:
+        print("CUDA is not available. Please check your installation.")
+        
+        
+def view_model_device_allocation(model,cpu_only=False):
+    print("The model: {} is allocated on the following devices:".format(model.__class__.__name__) if hasattr(model, '__class__') else model)
+    print("-" * 40)
+    has_model_in_cpu=False
+    for name, param in model.named_parameters():
+        if cpu_only:
+            if param.device=='cpu':
+                has_model_in_cpu=True
+                print(f"{name}: {param.device}")
+        else:
+            print(f"{name}: {param.device}")
+    if not has_model_in_cpu:
+        print("NO CONTENT ON CPU")
+        
+        
+def check_frozen_parts(model,active_only=False):
+    for name, param in model.named_parameters():
+        if active_only:
+            if param.requires_grad:
+                print(f'{name}: {param.requires_grad}')
+        else:
+            print(f'{name}: {param.requires_grad}')

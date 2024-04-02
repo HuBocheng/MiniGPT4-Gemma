@@ -159,17 +159,30 @@ class Chat:
             self.stopping_criteria = StoppingCriteriaList([StoppingCriteriaSub(stops=stop_words_ids)])
 
     def ask(self, text, conv):
+        print("len of conv.messages",len(conv.messages))
+        print("before ask conv.messages",conv.messages)
+        print("conv.roles:",conv.roles)
         if len(conv.messages) > 0 and conv.messages[-1][0] == conv.roles[0] \
                 and conv.messages[-1][1][-6:] == '</Img>':  # last message is image.
             conv.messages[-1][1] = ' '.join([conv.messages[-1][1], text])
         else:
             conv.append_message(conv.roles[0], text)
+        print("after ask conv.messages:", conv.messages)
 
     def answer_prepare(self, conv, img_list, max_new_tokens=300, num_beams=1, min_length=1, top_p=0.9,
                        repetition_penalty=1.05, length_penalty=1, temperature=1.0, max_length=2000):
+        """
+        准备模型的生成参数。包括输入的embeddings，生成的最大token数，生成的最大长度等。
+        """
         conv.append_message(conv.roles[1], None)
-        prompt = conv.get_prompt()
-        embs = self.model.get_context_emb(prompt, img_list)
+        # print("In answer_prepare conv.roles is: ",conv.roles)
+        print("In answer_prepare conv.messages is: ", conv.messages)
+        # prompt = conv.get_prompt()
+        prompt=self.get_gemma_prompt(conv,self.model.llm_tokenizer)
+
+        print("In answer_prepare prompt is: ",prompt)
+        
+        embs = self.model.get_context_emb(prompt, img_list)  # 里面使用model自带的embed_tokens方法将prompt划分开并且经过编码器变成token id
 
         current_max_len = embs.shape[1] + max_new_tokens
         if current_max_len - max_length > 0:
@@ -194,9 +207,14 @@ class Chat:
 
     def answer(self, conv, img_list, **kargs):
         generation_dict = self.answer_prepare(conv, img_list, **kargs)
-        output_token = self.model_generate(**generation_dict)[0]
+        print("generation_dict:", generation_dict)
+
+        output_token = self.model_generate(**generation_dict)[0]  # 内部使用gemma/llama模型的generate方法根据给定的输入令牌ID生成文本
+                                                                  #  input_ids=inputs.to(model.device)：这是生成过程的输入令牌ID。
+        print("output_token:", output_token)
         # output_text = self.model.llama_tokenizer.decode(output_token, skip_special_tokens=True)
-        output_text = self.model.llm_tokenizer.decode(output_token, skip_special_tokens=True)
+        output_text = self.model.llm_tokenizer.decode(output_token, skip_special_tokens=True) # 用分词器将回答的token id组成的Tensor类型变回自然语言
+        print("output_text:", output_text)
 
 
         output_text = output_text.split('###')[0]  # remove the stop sign '###'
@@ -207,6 +225,7 @@ class Chat:
 
     def stream_answer(self, conv, img_list, **kargs):
         generation_kwargs = self.answer_prepare(conv, img_list, **kargs)
+
         streamer = TextIteratorStreamer(self.model.llama_tokenizer, skip_special_tokens=True)
         generation_kwargs['streamer'] = streamer
         thread = Thread(target=self.model_generate, kwargs=generation_kwargs)
@@ -242,4 +261,11 @@ class Chat:
         msg = "Received."
 
         return msg
+    def get_gemma_prompt(self, conv,llm_tokenizer):
+        prompt = conv.get_prompt()
+        chat = [
+            {"role": "user", "content": prompt},
+        ]
+        gemma_prompt = llm_tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+        return gemma_prompt
 

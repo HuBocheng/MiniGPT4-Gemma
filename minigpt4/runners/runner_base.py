@@ -23,7 +23,7 @@ from minigpt4.common.dist_utils import (
     main_process,
 )
 from minigpt4.common.registry import registry
-from minigpt4.common.utils import is_url
+from minigpt4.common.utils import is_url, view_gpu, view_model_device_allocation
 from minigpt4.datasets.data_utils import concat_datasets, reorg_datasets_by_split, ChainDataset
 from minigpt4.datasets.datasets.dataloader_utils import (
     IterLoader,
@@ -83,6 +83,9 @@ class RunnerBase:
         # move model to device
         if self._model.device != self.device:
             self._model = self._model.to(self.device)
+            # print("model:\n ", self._model)
+            # print("model moved to device", self.device)
+            view_gpu()
 
             # distributed training wrapper
             if self.use_distributed:
@@ -104,7 +107,7 @@ class RunnerBase:
             for n, p in self.model.named_parameters():
                 if not p.requires_grad:
                     continue  # frozen weights
-                print(n)
+                print("No frozen layers: ",n)
                 if p.ndim < 2 or "bias" in n or "ln" in n or "bn" in n:
                     p_non_wd.append(p)
                 else:
@@ -247,8 +250,12 @@ class RunnerBase:
 
             # create dataloaders
             split_names = sorted(self.datasets.keys())
+            print("In function dataloaders the split_names is ",split_names) # test point
 
             datasets = [self.datasets[split] for split in split_names]
+            
+            print("In function dataloaders the datasets is ",datasets) # test point
+            
             batch_sizes = [batch_sizes[split] for split in split_names]
             is_trains = [split in self.train_splits for split in split_names]
 
@@ -268,8 +275,11 @@ class RunnerBase:
                 is_trains=is_trains,
                 collate_fns=collate_fns,
             )
+            print(dataloaders)
 
             self._dataloaders = {k: v for k, v in zip(split_names, dataloaders)}
+            print(self._dataloaders)
+
 
         return self._dataloaders
 
@@ -339,7 +349,9 @@ class RunnerBase:
 
     @property
     def train_loader(self):
+        print("self.dataloaders is ",self.dataloaders)
         train_dataloader = self.dataloaders["train"]
+
 
         return train_dataloader
 
@@ -360,6 +372,10 @@ class RunnerBase:
         self.output_dir = output_dir
 
     def train(self):
+        # 展示载入模型的设备分配情况
+        # view_model_device_allocation(self.model)
+        # view_gpu()
+
         start_time = time.time()
         best_agg_metric = 0
         best_epoch = 0
@@ -434,6 +450,8 @@ class RunnerBase:
 
     def train_epoch(self, epoch):
         # train
+        print("***current train_epoch:", epoch)
+
         self.model.train()  # 将设备指定为GPU并且将model的所有子模块变成训练模式（train函数里将对model递归调用train函数保证子模块、子模块的子模块等模块都变成训练模式）
 
         return self.task.train_epoch(
@@ -556,6 +574,11 @@ class RunnerBase:
         for dataset, bsz, is_train, collate_fn in zip(
             datasets, batch_sizes, is_trains, collate_fns
         ):
+            print("The type of dataset is ",type(dataset))
+            for i,auto in enumerate(dataset):
+                # if i==0:
+                #     print("type of dataset elements:",type(auto))
+                print("The elenment{} of dataset is ".format(i),auto)
             if isinstance(dataset, list) or isinstance(dataset, tuple):
                 if hasattr(dataset[0], 'sample_ratio') and dataset_ratios is None:
                     dataset_ratios = [d.sample_ratio for d in dataset]
@@ -570,6 +593,13 @@ class RunnerBase:
                 loader = _create_loader(dataset, num_workers, bsz, is_train, collate_fn)
 
             loaders.append(loader)
+            print("function \'create_loaders\' return: ",loaders)
+            for i,auto in enumerate(loaders):
+                print("The type of element{} is {}".format(i,type(auto)))
+                if isinstance(auto,MultiIterLoader):
+                    print("The loaders of ultiIterLoader is ",auto.loaders)
+                    print("The ratios of ultiIterLoader is ",auto.ratios)
+            # exit()
 
         return loaders
 

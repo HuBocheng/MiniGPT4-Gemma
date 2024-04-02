@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from transformers import LlamaTokenizer
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoTokenizer, AutoModelForCausalLM,BitsAndBytesConfig
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -23,9 +23,10 @@ from peft import (
 )
 
 from minigpt4.common.dist_utils import download_cached_file
-from minigpt4.common.utils import get_abs_path, is_url
+from minigpt4.common.utils import get_abs_path, is_url,view_gpu,view_model_device_allocation
 from minigpt4.models.eva_vit import create_eva_vit_g
 from minigpt4.models.modeling_llama import LlamaForCausalLM
+
 
 
 # 所有模块的基类，下面有1个子类2个孙子类（MiniGPTBase。MiniGPT4、MiniGPT4v2是MiniGPTBase子类）
@@ -146,7 +147,7 @@ class BaseModel(nn.Module):
         # if on cpu, don't use autocast
         # if on gpu, use autocast with dtype if provided, otherwise use torch.float16
         enable_autocast = self.device != torch.device("cpu")
-
+        # 如果在GPU上运行，那么就使用自动类型转换，将数据类型转换为指定的数据类型（如果提供了的话），否则默认转换为float16。 
         if enable_autocast:
             return torch.cuda.amp.autocast(dtype=dtype)
         else:
@@ -215,23 +216,91 @@ class BaseModel(nn.Module):
 
         if llm_type == 'gemma':
             assert transformers_version >= "4.38.2", "GEMMA requires transformers>=4.38.2"
+            # quantization_config = BitsAndBytesConfig(load_in_8bit=True)
             gemma_tokenizer = AutoTokenizer.from_pretrained(llm_backbone_path, use_auth_token=self.get_hf_token(),
                                                             torch_dtype=torch.float16)
-            gemma_model = AutoModelForCausalLM.from_pretrained(llm_backbone_path, device_map="auto",
-                                                               torch_dtype=torch.float16,
-                                                               use_auth_token=self.get_hf_token())
+            
+            #print("after loading gemma_tokenizer:")
+            #view_gpu()
+
+            if low_resource:
+                print("Using 8-bit precision [int8]")
+                quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+                gemma_model=AutoModelForCausalLM.from_pretrained(llm_backbone_path,device_map="auto",
+                                                                 quantization_config=quantization_config,
+                                                                 use_auth_token=self.get_hf_token())
+            else:
+                gemma_model = AutoModelForCausalLM.from_pretrained(llm_backbone_path,device_map="auto",
+                                                                   torch_dtype=torch.float16,
+                                                                   use_auth_token=self.get_hf_token())
+            # test chat
+            chat = [
+                        { "role": "user", "content": "Write a hello world program" },
+                    ]
+            prompt = gemma_tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+            # tokenize=False控制输入文本是否被分词为模型可理解的令牌，设为False意味着函数将返回处理后的输入文本作为字符串，而不是将其转换为令牌
+            # 决定是否在输入文本的末尾添加生成提示
+            print("prompt:",prompt)
+            
+            inputs = gemma_tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
+            print("inputs:",inputs)
+            
+            outputs = gemma_model.generate(input_ids=inputs.to(gemma_model.device), max_new_tokens=150)
+            print("outputs:",outputs)
+            print("type of outputs:",type(outputs))
+            
+            # 将输出张量转换为列表形式的令牌ID，为此需要先将张量从GPU移动到CPU，并转换为列表
+            token_ids = outputs.cpu().tolist()[0]  # 假设你只关注第一个生成的序列
+
+            # 使用分词器的 decode 方法将令牌ID列表转换回文本
+            generated_text = gemma_tokenizer.decode(token_ids, skip_special_tokens=True)
+
+            print("generated_text:",generated_text)
+
+            # exit()
+
+            
+            
+            #print("after loading gemma_model:")
+            #view_gpu()
             # gemma_tokenizer.pad_token = "$$"  # 填充令牌被显式设置为$$，todo：gemma是否需要
+            
+            # print("***The contents of gemma_model:")
+            # for name, module in gemma_model.named_children():
+            #     print(name)
+            #     print(module)
+
+            # print('The device_map of gemma_model: ', gemma_model.hf_device_map)
+
 
             # 冻结
             for name, param in gemma_model.named_parameters():
                 param.requires_grad = False
+                
+            # 把一些层放在cpu
+            # gemma_model.model.embed_tokens.to('cpu')
+            # 假设你想将前3层移动到CPU
+            # for i in range(5):
+            #     layer = gemma_model.model.layers[i]
+                # layer.to('cpu')
+            # view_model_device_allocation(gemma_model)
+            # view_gpu()
+
+
             # todo:对标下面的llama代码补充低资源的代码和lora的代码
             logging.info('Loading GEMMA Done')
             return gemma_model, gemma_tokenizer
+        
         if llm_type == 'llama':
             assert transformers_version == "4.30.0", "LLAMA requires transformers==4.30.0"
+            print("before loading llama:")
+            view_gpu()
+            
             llama_tokenizer = LlamaTokenizer.from_pretrained(llm_backbone_path, use_fast=False)  # 模型的分词器，负责处理输入文本的分词任务
             llama_tokenizer.pad_token = "$$"  # 填充令牌被显式设置为$$
+            
+            print("before loading llamamodel:")
+            view_gpu()
 
             if low_resource:
                 llama_model = LlamaForCausalLM.from_pretrained(
@@ -263,6 +332,7 @@ class BaseModel(nn.Module):
                 for name, param in llama_model.named_parameters():
                     param.requires_grad = False
             logging.info('Loading LLAMA Done')
+            view_gpu()
             return llama_model, llama_tokenizer
 
     def load_from_pretrained(self, url_or_filename):

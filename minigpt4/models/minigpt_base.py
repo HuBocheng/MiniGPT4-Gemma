@@ -69,15 +69,46 @@ class MiniGPTBase(BaseModel):
         self.visual_encoder.float()
 
     def get_context_emb(self, prompt, img_list):
+        """
+        将文本提示（prompt）和一组图像（img_list）融合成一个统一的上下文嵌入
+
+        """
         device = img_list[0].device
+        print("img_list:", img_list)
+        
         prompt_segs = prompt.split('<ImageHere>')
+        print("prompt_segs:", prompt_segs)
+        
         assert len(prompt_segs) == len(img_list) + 1, "Unmatched numbers of image placeholders and images."
         seg_tokens = [
             self.llm_tokenizer(
-                seg, return_tensors="pt", add_special_tokens=i==0).to(device).input_ids # only add bos to the first seg
+                seg, return_tensors="pt", add_special_tokens=False).to(device).input_ids # only add bos to the first seg
             for i, seg in enumerate(prompt_segs)
         ]
+        # todo：上面这里就不用add_special_tokens=i == 0，传入的prompt开头带了bos
+        print("seg_tokens:", seg_tokens)
+        
+        
+        # 初始化一个空列表来存储解码后的文本段落
+        decoded_texts = []
+        decoded_texts2 = []
+
+        # 遍历 seg_tokens 中的每个张量（每个张量代表一段文本的令牌ID）
+        for tensor in seg_tokens:
+            # 将张量从 GPU 移动到 CPU，并转换为列表形式
+            token_ids = tensor.cpu().tolist()[0]  # 假设每个张量只包含一个序列
+            # 使用分词器的 decode 方法将令牌ID转换回文本，跳过特殊令牌
+            decoded_text = self.llm_tokenizer.decode(token_ids, skip_special_tokens=True)
+            decoded_text2=self.llm_tokenizer.decode(token_ids, skip_special_tokens=False)
+            # 将解码后的文本添加到列表中
+            decoded_texts.append(decoded_text)
+            decoded_texts2.append(decoded_text2)
+        print("decoded_text:",decoded_texts)
+        print("decoded_text2:",decoded_texts2)
+        
+        
         seg_embs = [self.embed_tokens(seg_t) for seg_t in seg_tokens]
+        print("seg_embs:", seg_embs)
 
         mixed_embs = [emb for pair in zip(seg_embs[:-1], img_list) for emb in pair] + [seg_embs[-1]]
         mixed_embs = torch.cat(mixed_embs, dim=1)
@@ -212,13 +243,16 @@ class MiniGPTBase(BaseModel):
         return to_regress_token_ids, to_regress_token_attn, targets
 
     def preparing_embedding(self, samples):
-        ### prepare input tokens
+        """
+        为不同类型的输入样本（图像、对话、指令）准备嵌入表示和相应的注意力掩码，
+        """
+        ### prepare input tokens 准备图像的嵌入表示和注意力掩码
         if 'image' in samples:
-            img_embeds, img_atts = self.encode_img(samples["image"])
+            img_embeds, img_atts = self.encode_img(samples["image"])  # 这里用的是minigpt4类中的encode_img
         else:
             img_embeds = img_atts = None
 
-        if 'conv_q' in samples:
+        if 'conv_q' in samples:  # 专门处理对话数据集
             # handeling conversation datasets
             conv_q, conv_a = samples['conv_q'], samples['conv_a']
 
@@ -232,7 +266,7 @@ class MiniGPTBase(BaseModel):
             regress_token_ids, regress_atts, part_targets = self.tokenize_conversation(conv_q, conv_a)
 
         else:
-            if "instruction_input" in samples:
+            if "instruction_input" in samples:  # 专门处理指令输入
                 instruction = samples["instruction_input"]
             elif self.prompt_list:
                 instruction = random.choice(self.prompt_list)
@@ -333,6 +367,10 @@ class MiniGPTBase(BaseModel):
         return {"loss": loss}
 
     def embed_tokens(self, token_ids):
+        """
+        将令牌ID转换成嵌入表示(这些向量这些向量代表了输入文本在模型学习到的语义空间中的位置,代表了输入文本在模型学习到的语义空间中的位置)
+        """
+        
         if hasattr(self.llm_model.base_model, 'model'): ## lora wrapped model
             embeds = self.llm_model.base_model.model.model.embed_tokens(token_ids)
         else:

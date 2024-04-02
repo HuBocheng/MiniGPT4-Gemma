@@ -9,10 +9,10 @@ class CCSBUDataset(BaseDataset):
     def __init__(self, vis_processor, text_processor, location):
         super().__init__(vis_processor=vis_processor, text_processor=text_processor)
 
-        self.inner_dataset = wds.DataPipeline(
+        self.inner_dataset = wds.DataPipeline(  # 这个属性在相应数据集构建器（bulider）中的bulid方法中调用
             wds.ResampledShards(location),
             wds.tarfile_to_samples(handler=wds.warn_and_continue),
-            wds.shuffle(1000, handler=wds.warn_and_continue),
+            wds.shuffle(1000, handler=wds.warn_and_continue),  # 随机依赖于random.seed()，在train.py中设定好了
             wds.decode("pilrgb", handler=wds.warn_and_continue),
             wds.to_tuple("jpg", "json", handler=wds.warn_and_continue),
             wds.map_tuple(self.vis_processor, handler=wds.warn_and_continue),

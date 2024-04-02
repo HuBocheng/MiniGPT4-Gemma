@@ -58,11 +58,13 @@ class BaseTask:
             builder = registry.get_builder_class(name_i)(ith_dataset_config)
             dataset = builder.build_datasets()
 
-            dataset['train'].name_i = name_i
+            # 给刚得到的dataset字典下创建子创建字典，字典第一层是train，第二层是name_i,第三层是sample_ratio
+            dataset['train'].name_i = name_i  # 给dataset['train']下创建name_i属性，值为name_i
             if 'sample_ratio' in ith_dataset_config:
                 dataset['train'].sample_ratio = ith_dataset_config.sample_ratio
 
-            datasets[name_i] = dataset
+            datasets[name_i] = dataset  # 将dataset字典下的train键值对赋值给datasets字典下的name_i键值对
+            # dataset是一个单元素字典，键是'train'，值是一个webdataset.pipline.DataPipeline对象
 
         return datasets
 
@@ -194,6 +196,8 @@ class BaseTask:
         if start_iters is None:
             # epoch-based runner
             inner_epoch = epoch
+            print("This task is based on epoch")
+            # exit()
         else:
             # In iter-based runner, we schedule the learning rate based on iterations.
             inner_epoch = start_iters // iters_per_epoch
@@ -203,8 +207,17 @@ class BaseTask:
             # if using iter-based runner, we stop after iters_per_epoch iterations.
             if i >= iters_per_epoch:
                 break
-
+                
+            
+            # print("before execute next(data_loader), the data_loader is ",data_loader)
+            
             samples = next(data_loader)
+            #print("In _train_inner_loop, samples: ", samples)
+            #print("In _train_inner_loop, samples type: ", type(samples))
+            # print("In _train_inner_loop, data_loader: ", data_loader)
+            #print("In _train_inner_loop, data_loader type: ", type(data_loader))
+            # exit()
+            
 
             samples = prepare_sample(samples, cuda_enabled=cuda_enabled)
             samples.update(

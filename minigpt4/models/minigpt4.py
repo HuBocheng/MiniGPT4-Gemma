@@ -126,7 +126,7 @@ class MiniGPT4(MiniGPTBase):
             image = image.reshape(-1, *image.shape[-3:])
 
         with self.maybe_autocast():
-            image_embeds = self.ln_vision(self.visual_encoder(image)).to(device)
+            image_embeds = self.ln_vision(self.visual_encoder(image)).to(device)  # 图像先经过视觉编码器，再经过视觉的层归一化部分
             if self.has_qformer:
                 image_atts = torch.ones(image_embeds.size()[:-1], dtype=torch.long).to(device)
 
@@ -140,12 +140,14 @@ class MiniGPT4(MiniGPTBase):
 
                 inputs_llama = self.llama_proj(query_output.last_hidden_state)
             else:
-                image_embeds = image_embeds[:, 1:, :]
-                bs, pn, hs = image_embeds.shape
+                image_embeds = image_embeds[:, 1:, :]  # 跳过每个批次中序列的第一个元素，因为它是CLS token
+                bs, pn, hs = image_embeds.shape  # bs是批次大小，pn是序列长度，hs是隐藏层大小
                 image_embeds = image_embeds.view(bs, int(pn / 4), int(hs * 4))
 
-                inputs_llama = self.llama_proj(image_embeds)
-            atts_llama = torch.ones(inputs_llama.size()[:-1], dtype=torch.long).to(image.device)
+                inputs_llama = self.llama_proj(image_embeds)  # 图像的嵌入经过llama_proj层，映射到LLM
+                
+            # 下面生成一个全1的张量作为注意力掩码，形状与inputs_llama的形状相同，每个嵌入位置都被标记为“应该被注意”
+            atts_llama = torch.ones(inputs_llama.size()[:-1], dtype=torch.long).to(image.device)  
         return inputs_llama, atts_llama
 
     @classmethod
@@ -163,6 +165,7 @@ class MiniGPT4(MiniGPTBase):
         has_qformer = cfg.get("has_qformer", True)
         freeze_qformer = cfg.get("freeze_qformer", True)
         low_resource = cfg.get("low_resource", False)
+        print("low_resource:",low_resource)
         device_8bit = cfg.get("device_8bit", 0)
 
         prompt_path = cfg.get("prompt_path", "")

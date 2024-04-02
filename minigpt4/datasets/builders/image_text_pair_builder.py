@@ -449,7 +449,7 @@ class CCSBUBuilder(BaseDatasetBuilder):
 
         # create datasets
         # [NOTE] return inner_datasets (wds.DataPipeline)
-        dataset_cls = self.train_dataset_cls
+        dataset_cls = self.train_dataset_cls  # 是CCSBUDataset，继承自BaseDataset
         datasets[split] = dataset_cls(
             vis_processor=self.vis_processors[split],
             text_processor=self.text_processors[split],

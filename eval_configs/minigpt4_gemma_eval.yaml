@@ -7,7 +7,7 @@ model:
   prompt_template: '[INST] {} [/INST] '
   # ckpt: 'please set this value to the path of pretrained checkpoint'
   # ckpt: 'weight/checkpoint_stage3.pth'
-  ckpt: './weight/checkpoint_5.pth'
+  ckpt: '/root/weight/checkpoint_5.pth'
 
 
 datasets:
